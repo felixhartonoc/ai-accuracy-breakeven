@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Accuracy Break-Even — when is automating worth it?</title>
+<meta name="description" content="Enter your volume, the cost of a wrong output, your review cost and your measured model accuracy. See the minimum accuracy automation needs to beat manual review.">
+<meta property="og:title" content="AI Accuracy Break-Even">
+<meta property="og:description" content="The minimum model accuracy your workflow needs before automating beats reviewing by hand.">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --ink: #14161a;
+    --muted: #5c6370;
+    --line: #e3e6ea;
+    --bg: #fbfbfc;
+    --card: #ffffff;
+    --accent: #1b4dff;
+    --good: #0d7a4a;
+    --goodbg: #eefaf3;
+    --bad: #b3261e;
+    --badbg: #fdeceb;
+    --warn: #8a5a00;
+    --warnbg: #fdf6e6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px 72px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header { margin-bottom: 32px; }
+  h1 { font-size: 27px; line-height: 1.25; margin: 0 0 10px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin: 0; max-width: 62ch; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 22px;
+  }
+  h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 13.5px; font-weight: 500; margin-bottom: 6px; }
+  .hint { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  select, input[type="number"] {
+    font: inherit;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+  }
+  select { max-width: 200px; }
+  input[type="number"]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .hero {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    background: #fff;
+  }
+  .hero .kicker { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+  .hero .big { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+  .hero .sub { font-size: 13.5px; color: var(--muted); margin-top: 6px; }
+  .verdict {
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 14.5px;
+    margin-bottom: 16px;
+    border: 1px solid transparent;
+  }
+  .verdict.good { background: var(--goodbg); border-color: #c4e8d5; color: var(--good); }
+  .verdict.bad { background: var(--badbg); border-color: #f5c9c6; color: var(--bad); }
+  .verdict.warn { background: var(--warnbg); border-color: #efdcae; color: var(--warn); }
+  .verdict strong { display: block; font-size: 15.5px; margin-bottom: 3px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.pick td { background: #f4f7ff; }
+  tr.pick td:first-child strong::after { content: " ◀ cheapest"; color: var(--accent); font-weight: 600; font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  .detail { color: var(--muted); font-size: 12.5px; }
+  details { margin-top: 28px; font-size: 14px; color: var(--muted); }
+  details summary { cursor: pointer; font-weight: 500; color: var(--ink); }
+  details p { margin: 10px 0; }
+  code { background: #f1f3f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  footer { margin-top: 36px; font-size: 13px; color: var(--muted); }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI Accuracy Break-Even</h1>
+    <p class="lede">Most AI cost models answer &ldquo;what will it cost?&rdquo; This one answers the question that comes first: <strong>is your model accurate enough for automating to beat reviewing by hand?</strong> Four numbers, one threshold.</p>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Your numbers</h2>
+      <div class="field">
+        <label for="currency">Currency</label>
+        <select id="currency">
+          <option value="$">USD $</option>
+          <option value="&euro;">EUR &euro;</option>
+          <option value="&pound;">GBP &pound;</option>
+          <option value="Rp">IDR Rp</option>
+          <option value="&#8377;">INR &#8377;</option>
+          <option value="">(none)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="volume">Outputs per day<span class="hint">How many times the model produces something a human would otherwise check.</span></label>
+        <input type="number" id="volume" value="2000" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="errorCost">Cost of one wrong output getting through<span class="hint">Rework, refund, bad decision, customer impact.</span></label>
+        <input type="number" id="errorCost" value="12" min="0" step="0.01">
+      </div>
+      <div class="field">
+        <label for="reviewCost">Cost to have a human review one output<span class="hint">Fully loaded — time cost per check.</span></label>
+        <input type="number" id="reviewCost" value="3.5" min="0" step="0.01">
+      </div>
+      <div class="field">
+        <label for="accuracy">Your measured model accuracy (%)<span class="hint">Measured on your own data, not the vendor benchmark.</span></label>
+        <input type="number" id="accuracy" value="94" min="0" max="100" step="0.1">
+      </div>
+    </section>
+
+    <section>
+      <div class="hero">
+        <div class="kicker">Break-even accuracy</div>
+        <div class="big" id="beValue">&mdash;</div>
+        <div class="sub" id="beSub">Loading&hellip;</div>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+
+      <div class="card">
+        <h2>Cost per 1,000 outputs</h2>
+        <table>
+          <thead>
+            <tr><th>Strategy</th><th class="num">Cost</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <details>
+    <summary>How this is calculated</summary>
+    <p><strong>Break-even accuracy</strong> = <code>1 &minus; (review cost &divide; error cost)</code>. Above it, letting the model run costs less than having a human check everything. Below it, unreviewed automation costs more than full review.</p>
+    <p><strong>No review</strong> = <code>1,000 &times; (1 &minus; accuracy) &times; error cost</code>.</p>
+    <p><strong>Full review</strong> = <code>1,000 &times; review cost</code>.</p>
+    <p><strong>Targeted review</strong> sends the lowest-confidence share of outputs — a share equal to the model&rsquo;s error rate — to a human, and assumes that tail catches 90% of the errors. It is the only strategy of the three that assumes a confidence signal actually exists.</p>
+    <p>The 90% capture figure is an assumption, not a measurement. If you have not calibrated a confidence signal on your own data, treat the targeted-review row as a number to earn rather than one you already have.</p>
+    <p>Everything runs in this page. No input is sent anywhere.</p>
+  </details>
+
+  <footer>
+    Built for <a href="https://ctaio.dev">ctaio.dev</a> as a small standalone tool. The failure it prices out &mdash; accuracy mismatch against the required threshold &mdash; is one of the five patterns in CTAIO&rsquo;s enterprise AI ROI playbook.
+  </footer>
+</div>
+
+<script>
+(function () {
+  var ids = ["volume", "errorCost", "reviewCost", "accuracy", "currency"];
+  var el = {};
+  ids.forEach(function (id) { el[id] = document.getElementById(id); });
+
+  var CAPTURE = 0.9;
+
+  function num(node, fallback) {
+    var value = parseFloat(node.value);
+    return isFinite(value) ? value : fallback;
+  }
+
+  function money(symbol, value) {
+    var rounded = Math.round(value * 100) / 100;
+    var text = rounded.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return symbol ? symbol + " " + text : text;
+  }
+
+  function pct(value) {
+    return (value * 100).toFixed(1) + "%";
+  }
+
+  function render() {
+    var symbol = el.currency.value;
+    var volume = Math.max(0, num(el.volume, 0));
+    var errorCost = Math.max(0, num(el.errorCost, 0));
+    var reviewCost = Math.max(0, num(el.reviewCost, 0));
+    var accuracy = Math.min(100, Math.max(0, num(el.accuracy, 0))) / 100;
+
+    var errorRate = 1 - accuracy;
+    var beValue = document.getElementById("beValue");
+    var beSub = document.getElementById("beSub");
+    var verdict = document.getElementById("verdict");
+    var rows = document.getElementById("rows");
+
+    var noReview = 1000 * errorRate * errorCost;
+    var fullReview = 1000 * reviewCost;
+    var targeted = 1000 * errorRate * reviewCost + 1000 * errorRate * (1 - CAPTURE) * errorCost;
+
+    var strategies = [
+      { name: "No review", detail: "model output ships as-is", cost: noReview },
+      { name: "Full review", detail: "a human checks every output", cost: fullReview },
+      { name: "Targeted review", detail: "lowest-confidence " + pct(errorRate) + " goes to a human", cost: targeted }
+    ];
+
+    var cheapest = strategies.reduce(function (best, item) {
+      return item.cost < best.cost ? item : best;
+    }, strategies[0]);
+
+    rows.innerHTML = strategies.map(function (item) {
+      var pick = item === cheapest ? ' class="pick"' : "";
+      return "<tr" + pick + "><td><strong>" + item.name + "</strong><br><span class=\"detail\">" + item.detail + "</span></td><td class=\"num\">" + money(symbol, item.cost) + "</td></tr>";
+    }).join("");
+
+    if (errorCost <= 0) {
+      beValue.textContent = "—";
+      beSub.textContent = "A wrong output has no cost, so there is nothing to break even against.";
+      verdict.className = "verdict warn";
+      verdict.innerHTML = "<strong>Nothing to weigh yet</strong>Set a cost for a wrong output. With a zero error cost, accuracy stops mattering to the economics.";
+      return;
+    }
+
+    if (reviewCost >= errorCost) {
+      beValue.textContent = "0.0%";
+      beSub.textContent = "Reviewing costs more than the error it prevents, so checking everything is cheaper at any accuracy.";
+      verdict.className = "verdict warn";
+      verdict.innerHTML = "<strong>Review everything</strong>One error costs more than one review at this ratio. Automation only pays here if accuracy is near-perfect, or if you can lower the review cost itself.";
+      return;
+    }
+
+    var threshold = 1 - reviewCost / errorCost;
+    beValue.textContent = pct(threshold);
+    beSub.textContent = "The accuracy at which running unreviewed costs the same as reviewing everything.";
+
+    if (accuracy >= threshold) {
+      verdict.className = "verdict good";
+      verdict.innerHTML = "<strong>Clear of the threshold</strong>At " + pct(accuracy) + " accuracy you sit " + pct(accuracy - threshold) + " above break-even, so shipping unreviewed is economically defensible. Targeted review is still the cheapest line below.";
+    } else {
+      verdict.className = "verdict bad";
+      verdict.innerHTML = "<strong>Below the threshold</strong>At " + pct(accuracy) + " accuracy you are " + pct(threshold - accuracy) + " short of break-even. Shipping without review costs more than checking everything. Close the accuracy gap, cut the review cost, or route the low-confidence tail to a human.";
+    }
+  }
+
+  ids.forEach(function (id) {
+    el[id].addEventListener("input", render);
+    el[id].addEventListener("change", render);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
